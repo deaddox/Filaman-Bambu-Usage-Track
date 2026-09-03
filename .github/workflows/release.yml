@@ -41,7 +41,9 @@ jobs:
 
             echo "📦 Building $ZIP_NAME from $PLUGIN_DIR ..."
             ls -la "$PLUGIN_DIR"
-            zip -j "$ZIP_NAME" "$PLUGIN_DIR"/plugin.json "$PLUGIN_DIR"/__init__.py "$PLUGIN_DIR"/driver.py "$PLUGIN_DIR"/bambu_filaments.json -x "__pycache__/*" "*.pyc"
+            cd "$PLUGIN_DIR"
+            zip -j "../$ZIP_NAME" plugin.json __init__.py driver.py bambu_filaments.json
+            cd ..
 
             DESCRIPTION=$(grep -o '"description"[[:space:]]*:[[:space:]]*"[^"]*"' "$PLUGIN_JSON" | head -1 | sed 's/.*"description"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
             NOTES="**Plugin:** ${PLUGIN_KEY}"
