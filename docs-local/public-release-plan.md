@@ -1,4 +1,4 @@
-# Public Release Plan for v3.0.0
+# Public Release Plan for v3.0.1
 
 This is a detailed plan that can be executed by an AI coding agent or a human maintainer to prepare the repo for a public GitHub release.
 
@@ -34,7 +34,7 @@ Publish a clean, public v1 release of the Bambu Lab FilaMan plugin without expos
 - Run the full unit test suite.
 - Confirm the project passes with no failures.
 - Check that release metadata is valid:
-- semver is proper (`3.0.0`)
+- semver is proper (`3.0.1`)
 - plugin manifest version matches release tag version
 - plugin key and driver key are consistent and distinct from the built-in Bambu driver
 
@@ -67,7 +67,7 @@ Publish a clean, public v1 release of the Bambu Lab FilaMan plugin without expos
 
 ### 6) Create and verify GitHub release
 
-- Create a GitHub repository release tagged as `v3.0.0`.
+- Create a GitHub repository release tagged as `v3.0.1`.
 - Attach the cleaned plugin ZIP asset.
 - Add public release notes with:
   - summary of features
@@ -99,7 +99,7 @@ Publish a clean, public v1 release of the Bambu Lab FilaMan plugin without expos
 
 ### Task B: Release metadata update
 
-1. Confirm plugin manifest version is `3.0.0`.
+1. Confirm plugin manifest version is `3.0.1`.
 2. Confirm README and release docs align with the public-facing version.
 3. Ensure the public docs mention the repo is intended for public GitHub use.
 
@@ -120,7 +120,7 @@ Publish a clean, public v1 release of the Bambu Lab FilaMan plugin without expos
 
 1. Create or update the public GitHub repo settings if needed.
 2. Push the cleaned branch.
-3. Create a release tag `v3.0.0`.
+3. Create a release tag `v3.0.1`.
 4. Upload the release ZIP asset.
 5. Publish the release notes.
 
@@ -130,11 +130,11 @@ The release is considered ready when all of the following are true:
 
 - No secrets or private data remain in the repo.
 - The project passes its automated tests.
-- The plugin version is set to `3.0.0`.
+- The plugin version is set to `3.0.1`.
 - User-facing setup documentation is complete.
 - The release ZIP is valid and correctly structured.
 - The GitHub repo can be made public without exposing private artifacts.
 
 ## Suggested Commit Message
 
-`chore: prepare public v3.0.0 release and sanitize repo`
+`chore: prepare public v3.0.1 release and sanitize repo`

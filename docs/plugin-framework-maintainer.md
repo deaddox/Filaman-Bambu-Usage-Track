@@ -16,7 +16,7 @@ Required for this driver plugin:
 - `plugin_key`: `bambu_consu`
 - `plugin_type`: `driver`
 - `driver_key`: `bambu_consu`
-- `version`: semver (for example `3.0.0`)
+- `version`: semver (for example `3.0.1`)
 - `config_schema`: valid JSON schema for printer config
 
 Expected optional sections used by this plugin:

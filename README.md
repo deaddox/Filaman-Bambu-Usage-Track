@@ -47,7 +47,7 @@ This plugin is distributed as a release ZIP for manual installation through the 
 
 ## Public GitHub v3 Release Readiness
 
-This repository is being prepared for the first public GitHub release, version 3.0.0. Before making the repository public, confirm the following:
+This repository is being prepared for the first public GitHub release, version 3.0.1. Before making the repository public, confirm the following:
 
 - No secrets, keys, access tokens, or captured browser sessions remain in the repo.
 - No `.har`, `.env`, `.pem`, or private key files are checked in.
@@ -69,7 +69,7 @@ See [docs/user-setup-guide.md](docs/user-setup-guide.md) for full setup and trou
 
 ## Required FilaMan Version
 
-- Plugin v3.0.0 targets the current `filaman-system` main branch plugin framework.
+- Plugin v3.0.1 targets the current `filaman-system` main branch plugin framework.
 - Grouped slot UI (`slot_kind`) requires FilaMan v1.2.19+.
 - The plugin remains backward compatible with v1.2.16+ (older cores ignore `slot_kind`).
 
@@ -106,7 +106,7 @@ FilaMan now validates plugin ZIPs strictly during install/upgrade. Keep these ru
 - Avoid packaging cache artifacts:
 	- `__pycache__/`
 	- `*.pyc`
-- Keep manifest semver valid (for example `3.0.0`).
+- Keep manifest semver valid (for example `3.0.1`).
 
 ## Configuration
 

@@ -3,7 +3,7 @@
   "name": "Bambu Lab",
   "driver_key": "bambu_consu",
   "plugin_type": "driver",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Bambu Lab printer driver via bambulabs_api. Supports AMS, RFID and automatic filament matching. Uses a readonly-safe assignment flow: printer write commands are not sent, while slot reading, tracking, and FilaMan spool location assignment continue.",
   "author": "Dox base on FilaMan Original Plugin",
   "homepage": "https://www.filaman.app",
