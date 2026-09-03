@@ -90,6 +90,41 @@
       cursor: pointer;
     }
     .btn:disabled { opacity: 0.6; cursor: wait; }
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .picker {
+      display: grid;
+      gap: 6px;
+      min-width: 280px;
+      flex: 1 1 360px;
+    }
+    .picker label {
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--ink);
+    }
+    .picker select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 9px 10px;
+      color: var(--ink);
+      background: #fbfdf9;
+      font: inherit;
+    }
+    .hint {
+      font-size: 0.82rem;
+      color: var(--muted);
+      min-height: 1.1em;
+    }
+    .hint.error {
+      color: #a63b3b;
+    }
     .mono {
       font-family: "Consolas", "Courier New", monospace;
       font-size: 0.86rem;
@@ -116,6 +151,18 @@
     </section>
 
     <section class="card">
+      <div class="toolbar">
+        <div class="picker">
+          <label for="printer-select">Printer Context</label>
+          <select id="printer-select" aria-label="Select printer context">
+            <option value="">Loading printers...</option>
+          </select>
+          <div id="printer-hint" class="hint"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
       <div class="grid">
         <article class="kpi"><b id="kpi-running">-</b><span>Driver Running</span></article>
         <article class="kpi"><b id="kpi-connected">-</b><span>MQTT Connected</span></article>
@@ -138,6 +185,9 @@
     const running = document.getElementById("kpi-running");
     const connected = document.getElementById("kpi-connected");
     const slots = document.getElementById("kpi-slots");
+    const printerSelect = document.getElementById("printer-select");
+    const printerHint = document.getElementById("printer-hint");
+    const SELECTED_PRINTER_STORAGE_KEY = "bambu_plugin_selected_printer_id";
 
     function getPrinterIdFromQuery() {
       const params = new URLSearchParams(window.location.search);
@@ -159,6 +209,153 @@
         connected: false,
         slot_count: 0,
       };
+    }
+
+    function normalizePrintersPayload(payload) {
+      const source = Array.isArray(payload)
+        ? payload
+        : payload?.printers || payload?.items || payload?.data || [];
+
+      if (!Array.isArray(source)) {
+        return [];
+      }
+
+      const byId = new Map();
+      for (const raw of source) {
+        const parsedId = Number(raw?.id ?? raw?.printer_id ?? raw?.printerId);
+        if (!Number.isFinite(parsedId)) {
+          continue;
+        }
+        if (byId.has(parsedId)) {
+          continue;
+        }
+        const name = raw?.name || raw?.display_name || raw?.hostname || `Printer ${parsedId}`;
+        byId.set(parsedId, { id: parsedId, name: String(name) });
+      }
+
+      return Array.from(byId.values()).sort((a, b) => a.id - b.id);
+    }
+
+    function getStoredPrinterId() {
+      const raw = window.localStorage.getItem(SELECTED_PRINTER_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = Number(raw);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function setStoredPrinterId(printerId) {
+      if (Number.isFinite(printerId)) {
+        window.localStorage.setItem(SELECTED_PRINTER_STORAGE_KEY, String(printerId));
+      }
+    }
+
+    function setPrinterHint(message, isError) {
+      printerHint.textContent = message || "";
+      printerHint.classList.toggle("error", Boolean(isError));
+    }
+
+    function getEffectivePrinterId() {
+      const selected = Number(printerSelect.value);
+      if (Number.isFinite(selected)) {
+        return selected;
+      }
+      return getPrinterIdFromQuery() ?? getStoredPrinterId();
+    }
+
+    function applyPrinterSelectionOptions(printers, preferredId) {
+      printerSelect.innerHTML = "";
+
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Select printer";
+      printerSelect.appendChild(placeholder);
+
+      for (const printer of printers) {
+        const option = document.createElement("option");
+        option.value = String(printer.id);
+        option.textContent = `${printer.name} (${printer.id})`;
+        printerSelect.appendChild(option);
+      }
+
+      const hasPreferred = preferredId != null && printers.some((p) => p.id === preferredId);
+      if (hasPreferred) {
+        printerSelect.value = String(preferredId);
+      } else if (printers.length > 0) {
+        printerSelect.value = String(printers[0].id);
+      } else {
+        printerSelect.value = "";
+      }
+
+      printerSelect.disabled = printers.length === 0;
+    }
+
+    async function fetchPrinters() {
+      const endpoints = [
+        "/api/v1/printers",
+        "/api/printers",
+      ];
+
+      let lastError = null;
+      for (const endpoint of endpoints) {
+        try {
+          const res = await fetch(endpoint, { credentials: "include" });
+          if (!res.ok) {
+            lastError = new Error(`${endpoint} -> HTTP ${res.status}`);
+            continue;
+          }
+          const json = await res.json();
+          const printers = normalizePrintersPayload(json);
+          return { endpoint, printers };
+        } catch (error) {
+          lastError = new Error(`${endpoint} -> ${error}`);
+        }
+      }
+
+      throw lastError || new Error("No compatible printer list endpoint found");
+    }
+
+    async function initializePrinterContext() {
+      const queryPrinterId = getPrinterIdFromQuery();
+      const storedPrinterId = getStoredPrinterId();
+      const preferredPrinterId = queryPrinterId ?? storedPrinterId;
+
+      try {
+        const { endpoint, printers } = await fetchPrinters();
+        applyPrinterSelectionOptions(printers, preferredPrinterId);
+
+        const effective = getEffectivePrinterId();
+        if (effective != null) {
+          setStoredPrinterId(effective);
+        }
+
+        if (queryPrinterId != null) {
+          setPrinterHint(`Using printer from URL (source list: ${endpoint})`, false);
+        } else if (effective != null) {
+          setPrinterHint(`Using saved/default printer (source list: ${endpoint})`, false);
+        } else {
+          setPrinterHint(`No printers available from ${endpoint}`, true);
+        }
+      } catch (error) {
+        if (preferredPrinterId != null) {
+          applyPrinterSelectionOptions(
+            [{ id: preferredPrinterId, name: `Printer ${preferredPrinterId}` }],
+            preferredPrinterId,
+          );
+          setPrinterHint(`Using fallback context (${error})`, true);
+        } else {
+          applyPrinterSelectionOptions([], null);
+          setPrinterHint(`Unable to load printers (${error})`, true);
+        }
+      }
+    }
+
+    function updateUrlPrinterId(printerId) {
+      if (!Number.isFinite(printerId)) {
+        return;
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.set("printer_id", String(printerId));
+      window.history.replaceState({}, "", url.toString());
     }
 
     async function fetchHealthSnapshot(printerId) {
@@ -190,12 +387,15 @@
 
     async function loadSnapshot() {
       refreshBtn.disabled = true;
-      const printerId = getPrinterIdFromQuery();
+      const printerId = getEffectivePrinterId();
       if (printerId == null) {
-        out.textContent = "No printer_id query parameter found. Open this page from FilaMan plugin navigation to include context.";
+        out.textContent = "No printer selected. Choose a printer context to load health data.";
         refreshBtn.disabled = false;
         return;
       }
+
+      setStoredPrinterId(printerId);
+      updateUrlPrinterId(printerId);
 
       try {
         const { endpoint, health } = await fetchHealthSnapshot(printerId);
@@ -212,8 +412,9 @@
       }
     }
 
+    printerSelect.addEventListener("change", loadSnapshot);
     refreshBtn.addEventListener("click", loadSnapshot);
-    loadSnapshot();
+    initializePrinterContext().then(loadSnapshot);
   </script>
 </body>
 </html>
