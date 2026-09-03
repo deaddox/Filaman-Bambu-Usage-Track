@@ -254,6 +254,118 @@
       return found;
     }
 
+    function findFirstStringByKeys(root, keys) {
+      let found = null;
+      walkObjects(root, (node) => {
+        if (found != null) return;
+        for (const key of keys) {
+          if (!(key in node)) continue;
+          const value = node[key];
+          if (typeof value === "string" && value.trim()) {
+            found = value.trim().toLowerCase();
+            return;
+          }
+        }
+      });
+      return found;
+    }
+
+    function deriveRunning(data) {
+      const directRunning = asBool(
+        data?.running
+        ?? data?.is_running
+        ?? data?.active
+        ?? data?.driver_running
+        ?? data?.status,
+      );
+      if (directRunning != null) {
+        return directRunning;
+      }
+
+      const nestedRunning = findFirstBoolByKeys(data, [
+        "running",
+        "is_running",
+        "driver_running",
+        "active",
+        "enabled",
+      ]);
+      if (nestedRunning != null) {
+        return nestedRunning;
+      }
+
+      const state = findFirstStringByKeys(data, [
+        "status",
+        "state",
+        "driver_status",
+      ]);
+      if (state && ["running", "active", "started", "online", "ok"].includes(state)) {
+        return true;
+      }
+      if (state && ["stopped", "inactive", "disabled", "offline", "error"].includes(state)) {
+        return false;
+      }
+
+      // Last resort: if we can see slots/AMS payload, the driver is likely active.
+      if (Array.isArray(data?.slots) && data.slots.length > 0) {
+        return true;
+      }
+      if (Array.isArray(data?.ams_units) && data.ams_units.length > 0) {
+        return true;
+      }
+      return false;
+    }
+
+    function deriveConnected(data) {
+      const directConnected = asBool(
+        data?.connected
+        ?? data?.is_connected
+        ?? data?.mqtt_connected
+        ?? data?.connected_raw
+        ?? data?.online
+        ?? data?.connection_status,
+      );
+      if (directConnected != null) {
+        return directConnected;
+      }
+
+      const nestedConnected = findFirstBoolByKeys(data, [
+        "connected",
+        "is_connected",
+        "mqtt_connected",
+        "connected_raw",
+        "online",
+      ]);
+      if (nestedConnected != null) {
+        return nestedConnected;
+      }
+
+      const connectionState = findFirstStringByKeys(data, [
+        "connection_status",
+        "mqtt_status",
+        "mqtt_state",
+        "status",
+        "state",
+      ]);
+      if (connectionState && ["connected", "online", "ready", "ok"].includes(connectionState)) {
+        return true;
+      }
+      if (connectionState && ["disconnected", "offline", "error"].includes(connectionState)) {
+        return false;
+      }
+
+      // If MQTT heartbeat timestamps or rich slot payload exist, connection is likely live.
+      if (data?.last_mqtt_message_at || data?.last_connected_at) {
+        return true;
+      }
+      if (Array.isArray(data?.slots) && data.slots.length > 0) {
+        return true;
+      }
+      if (Array.isArray(data?.ams_units) && data.ams_units.length > 0) {
+        return true;
+      }
+      return false;
+    }
+
     function deriveSlotCount(data) {
       const direct = asNumber(
         data?.slot_count ?? data?.slots_count ?? data?.total_slots ?? data?.slotCount,
@@ -288,39 +400,8 @@
         || payload;
       const data = (raw && typeof raw === "object") ? raw : {};
 
-      const directRunning = asBool(
-        data?.running
-        ?? data?.is_running
-        ?? data?.active
-        ?? data?.driver_running
-        ?? data?.status,
-      );
-      const nestedRunning = findFirstBoolByKeys(data, [
-        "running",
-        "is_running",
-        "driver_running",
-        "active",
-        "enabled",
-      ]);
-
-      const directConnected = asBool(
-        data?.connected
-        ?? data?.is_connected
-        ?? data?.mqtt_connected
-        ?? data?.connected_raw
-        ?? data?.online
-        ?? data?.connection_status,
-      );
-      const nestedConnected = findFirstBoolByKeys(data, [
-        "connected",
-        "is_connected",
-        "mqtt_connected",
-        "connected_raw",
-        "online",
-      ]);
-
-      const running = directRunning ?? nestedRunning ?? false;
-      const connected = directConnected ?? nestedConnected ?? false;
+      const running = deriveRunning(data);
+      const connected = deriveConnected(data);
 
       return {
         ...data,
