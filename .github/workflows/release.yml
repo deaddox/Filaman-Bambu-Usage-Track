@@ -1,0 +1,60 @@
+name: Release Plugins
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Find and release plugins
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          for PLUGIN_JSON in $(find . -maxdepth 2 -name "plugin.json" -not -path "./.git/*"); do
+            PLUGIN_DIR=$(dirname "$PLUGIN_JSON")
+            VERSION=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$PLUGIN_JSON" | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+            PLUGIN_KEY=$(grep -o '"plugin_key"[[:space:]]*:[[:space:]]*"[^"]*"' "$PLUGIN_JSON" | head -1 | sed 's/.*"plugin_key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+
+            if [ -z "$VERSION" ] || [ -z "$PLUGIN_KEY" ]; then
+              echo "⚠️  Incomplete metadata in $PLUGIN_JSON, skipping."
+              continue
+            fi
+
+            TAG="${PLUGIN_KEY}-v${VERSION}"
+            ZIP_NAME="${PLUGIN_KEY}-${VERSION}.zip"
+
+            if gh release view "$TAG" > /dev/null 2>&1; then
+              echo "⚠️  Release $TAG already exists. Skipping."
+              continue
+            fi
+
+            echo "📦 Building $ZIP_NAME from $PLUGIN_DIR ..."
+            (cd "$PLUGIN_DIR" && zip -j "../$ZIP_NAME" plugin.json __init__.py driver.py bambu_filaments.json -x "__pycache__/*" "*.pyc")
+
+            DESCRIPTION=$(grep -o '"description"[[:space:]]*:[[:space:]]*"[^"]*"' "$PLUGIN_JSON" | head -1 | sed 's/.*"description"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+            NOTES="**Plugin:** ${PLUGIN_KEY}"
+            NOTES="${NOTES}%0A**Version:** ${VERSION}"
+            NOTES="${NOTES}%0A**Description:** ${DESCRIPTION}"
+
+            echo "📤 Creating GitHub release $TAG ..."
+            printf '%s' "$NOTES" | sed 's/%0A/\n/g' > /tmp/release_notes.md
+            gh release create "$TAG" "$ZIP_NAME" \
+              --title "${PLUGIN_KEY} ${VERSION}" \
+              --notes-file /tmp/release_notes.md \
+              --latest=false
+
+            echo "✅ Release $TAG with $ZIP_NAME created."
+          done
+
+          echo "🎉 Finished!"
