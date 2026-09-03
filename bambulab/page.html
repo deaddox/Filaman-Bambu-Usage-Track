@@ -147,6 +147,47 @@
       return Number.isFinite(parsed) ? parsed : null;
     }
 
+    function normalizeHealthPayload(payload) {
+      const data = payload?.health || payload?.driver_health || payload;
+
+      if (data && typeof data === "object") {
+        return data;
+      }
+
+      return {
+        running: false,
+        connected: false,
+        slot_count: 0,
+      };
+    }
+
+    async function fetchHealthSnapshot(printerId) {
+      const endpoints = [
+        `/api/v1/printers/${printerId}/health`,
+        `/api/v1/printers/${printerId}/status`,
+        `/api/v1/printers/${printerId}`,
+      ];
+
+      let lastError = null;
+
+      for (const endpoint of endpoints) {
+        try {
+          const res = await fetch(endpoint, { credentials: "include" });
+          if (!res.ok) {
+            lastError = new Error(`${endpoint} -> HTTP ${res.status}`);
+            continue;
+          }
+
+          const json = await res.json();
+          return { endpoint, health: normalizeHealthPayload(json) };
+        } catch (error) {
+          lastError = new Error(`${endpoint} -> ${error}`);
+        }
+      }
+
+      throw lastError || new Error("No compatible printer health endpoint found");
+    }
+
     async function loadSnapshot() {
       refreshBtn.disabled = true;
       const printerId = getPrinterIdFromQuery();
@@ -157,18 +198,13 @@
       }
 
       try {
-        const res = await fetch(`/api/v1/printers/${printerId}/health`, { credentials: "include" });
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-        const data = await res.json();
-        const health = data?.health || data;
+        const { endpoint, health } = await fetchHealthSnapshot(printerId);
 
         running.textContent = health?.running ? "Yes" : "No";
         connected.textContent = health?.connected ? "Yes" : "No";
         slots.textContent = String(health?.slot_count ?? 0);
 
-        out.textContent = JSON.stringify(health, null, 2);
+        out.textContent = `Source: ${endpoint}\n\n${JSON.stringify(health, null, 2)}`;
       } catch (error) {
         out.textContent = `Failed to load health snapshot: ${error}`;
       } finally {
