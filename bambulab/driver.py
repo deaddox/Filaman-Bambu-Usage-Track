@@ -28,6 +28,11 @@ from app.models.spool import Spool
 from app.plugins.base import BaseDriver
 from app.services.spool_service import SpoolService
 
+from .catalog import CatalogMixin
+from .catalog_enrichment import CatalogEnrichmentMixin
+from .slots import SlotSupportMixin
+from .state import PendingSpool
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 60
@@ -79,18 +84,7 @@ class ImplicitFTP_TLS(ftplib.FTP_TLS):
         return conn, size
 
 
-class PendingSpool:
-    def __init__(
-        self, spool_id: int, filament_data: dict, slot_index: str | None = None
-    ):
-        self.spool_id = spool_id
-        self.filament_data = filament_data
-        self.slot_index = slot_index
-        self.started_at = datetime.utcnow()
-        self.timer: asyncio.Task | None = None
-
-
-class Driver(BaseDriver):
+class Driver(CatalogEnrichmentMixin, CatalogMixin, SlotSupportMixin, BaseDriver):
     driver_key = "bambu_consu"
     _instance_registry_lock = threading.Lock()
     _active_instance_claims: dict[str, int] = {}
@@ -135,6 +129,10 @@ class Driver(BaseDriver):
         )
         self._consumption_tracking_enabled = self._to_bool(
             config.get("enable_consumption_tracking", True), True
+        )
+        self._resolve_shop_images = self._to_bool(
+            config.get("resolve_shop_images", False),
+            False,
         )
         self._local_3mf_timeout_seconds = self._to_float(
             config.get("local_3mf_timeout_seconds", DEFAULT_LOCAL_3MF_TIMEOUT_SECONDS),
@@ -473,6 +471,7 @@ class Driver(BaseDriver):
                         printer.name if printer else f"Printer {self.printer_id}"
                     )
                 await self._reconcile_driver_slot_locations()
+                self._register_catalog_enrichment()
             except Exception as e:
                 logger.warning(f"Failed to load printer name: {e}")
                 self._printer_name = f"Printer {self.printer_id}"
@@ -485,6 +484,7 @@ class Driver(BaseDriver):
 
     async def stop(self) -> None:
         self._running = False
+        self._unregister_catalog_enrichment()
         self._slot_spool_ids = {}
         self._tracking_active = False
         self._tracking_started_at = None
@@ -4387,6 +4387,7 @@ class Driver(BaseDriver):
             "write_mode_source": write_mode_source,
             "write_mode_reason": write_mode_reason,
             "write_mode_checked_at": write_mode_checked_at,
+            "resolve_shop_images": self._resolve_shop_images,
             "auto_unassign_on_remove": self._auto_unassign_on_remove,
             "consumption_tracking_enabled": self._consumption_tracking_enabled,
             "consumption_tracking_active": self._tracking_active,

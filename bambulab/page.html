@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bambu Lab Plugin</title>
+  <style>
+    :root {
+      --bg: #f2f4ef;
+      --panel: #ffffff;
+      --ink: #1f2d1f;
+      --muted: #5f6e5f;
+      --brand: #1f7a4c;
+      --brand-soft: #d9efdf;
+      --border: #d3dccf;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 420px at 8% -8%, #dcebd8 0%, transparent 60%),
+        radial-gradient(900px 380px at 92% 0%, #e6f0dc 0%, transparent 58%),
+        var(--bg);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 10px 24px rgba(25, 40, 25, 0.06);
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      letter-spacing: 0.01em;
+    }
+    p { margin: 0; color: var(--muted); }
+    .hero {
+      display: grid;
+      gap: 10px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--brand-soft);
+      color: var(--brand);
+      font-weight: 600;
+      font-size: 0.86rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .kpi {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      background: #fbfdf9;
+    }
+    .kpi b { font-size: 1.3rem; display: block; }
+    .kpi span { color: var(--muted); font-size: 0.85rem; }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .btn {
+      border: 1px solid var(--brand);
+      background: var(--brand);
+      color: #fff;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn:disabled { opacity: 0.6; cursor: wait; }
+    .mono {
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 0.86rem;
+      white-space: pre-wrap;
+      background: #0f1811;
+      color: #d8f2dd;
+      border-radius: 10px;
+      padding: 12px;
+      min-height: 180px;
+      overflow: auto;
+    }
+    @media (max-width: 780px) {
+      body { padding: 14px; }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card hero">
+      <span class="badge">Bambu Lab Plugin Page</span>
+      <h1>Readonly AMS Overview</h1>
+      <p>This page is intentionally readonly-safe. It surfaces plugin health and slot data while assignment writes remain disabled.</p>
+    </section>
+
+    <section class="card">
+      <div class="grid">
+        <article class="kpi"><b id="kpi-running">-</b><span>Driver Running</span></article>
+        <article class="kpi"><b id="kpi-connected">-</b><span>MQTT Connected</span></article>
+        <article class="kpi"><b id="kpi-slots">-</b><span>Total Slots</span></article>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <strong>Live Snapshot</strong>
+        <button id="refresh" class="btn" type="button">Refresh</button>
+      </div>
+      <div id="out" class="mono" role="status">Waiting for refresh...</div>
+    </section>
+  </main>
+
+  <script>
+    const out = document.getElementById("out");
+    const refreshBtn = document.getElementById("refresh");
+    const running = document.getElementById("kpi-running");
+    const connected = document.getElementById("kpi-connected");
+    const slots = document.getElementById("kpi-slots");
+
+    function getPrinterIdFromQuery() {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get("printer_id") || params.get("id");
+      if (!id) return null;
+      const parsed = Number(id);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    async function loadSnapshot() {
+      refreshBtn.disabled = true;
+      const printerId = getPrinterIdFromQuery();
+      if (printerId == null) {
+        out.textContent = "No printer_id query parameter found. Open this page from FilaMan plugin navigation to include context.";
+        refreshBtn.disabled = false;
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/v1/printers/${printerId}/health`, { credentials: "include" });
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        const health = data?.health || data;
+
+        running.textContent = health?.running ? "Yes" : "No";
+        connected.textContent = health?.connected ? "Yes" : "No";
+        slots.textContent = String(health?.slot_count ?? 0);
+
+        out.textContent = JSON.stringify(health, null, 2);
+      } catch (error) {
+        out.textContent = `Failed to load health snapshot: ${error}`;
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    }
+
+    refreshBtn.addEventListener("click", loadSnapshot);
+    loadSnapshot();
+  </script>
+</body>
+</html>

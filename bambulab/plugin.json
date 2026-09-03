@@ -7,6 +7,8 @@
   "description": "Bambu Lab printer driver via bambulabs_api. Supports AMS, RFID and automatic filament matching. Uses a readonly-safe assignment flow: printer write commands are not sent, while slot reading, tracking, and FilaMan spool location assignment continue.",
   "author": "Dox base on FilaMan Original Plugin",
   "homepage": "https://www.filaman.app",
+  "page_url": "/plugin-page/bambulab",
+  "show_in_nav": true,
   "dependencies": ["bambulabs_api>=2.6.0"],
   "config_schema": {
     "type": "object",
@@ -67,6 +69,12 @@
         "title": "Verify FTPS Certificate",
         "description": "Validate printer FTPS TLS certificate for local 3MF fetch. Disable to auto-accept self-signed certificates.",
         "default": false
+      },
+      "resolve_shop_images": {
+        "type": "boolean",
+        "title": "Catalog Images (Bambu Lab)",
+        "description": "Resolve Bambu catalog image metadata and store image URLs on matching filaments. No image binaries are stored.",
+        "default": false
       }
     },
     "required": ["printer_model", "host", "serial", "access_code"]
@@ -76,7 +84,8 @@
     "has_rfid": true,
     "has_ams": true,
     "supports_auto_match": true,
-    "slot_kinds": true
+    "slot_kinds": true,
+    "catalog_images": true
   },
   "printer_params": {
     "target_types": ["filament_printer_param", "spool_printer_param"],
