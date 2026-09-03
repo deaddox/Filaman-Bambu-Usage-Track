@@ -197,17 +197,82 @@
       return Number.isFinite(parsed) ? parsed : null;
     }
 
-    function normalizeHealthPayload(payload) {
-      const data = payload?.health || payload?.driver_health || payload;
+    function asBool(value) {
+      if (typeof value === "boolean") return value;
+      if (typeof value === "number") return value !== 0;
+      if (typeof value === "string") {
+        const normalized = value.trim().toLowerCase();
+        if (["true", "yes", "on", "1", "running", "active", "connected", "online"].includes(normalized)) {
+          return true;
+        }
+        if (["false", "no", "off", "0", "stopped", "inactive", "disconnected", "offline"].includes(normalized)) {
+          return false;
+        }
+      }
+      return null;
+    }
 
-      if (data && typeof data === "object") {
-        return data;
+    function asNumber(value) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function deriveSlotCount(data) {
+      const direct = asNumber(
+        data?.slot_count ?? data?.slots_count ?? data?.total_slots ?? data?.slotCount,
+      );
+      if (direct != null) {
+        return direct;
       }
 
+      if (Array.isArray(data?.slots)) {
+        return data.slots.length;
+      }
+
+      if (Array.isArray(data?.ams_units)) {
+        const unitsCount = data.ams_units.reduce((sum, unit) => {
+          const trayCount = asNumber(unit?.tray_count ?? unit?.slot_count ?? unit?.count) ?? 0;
+          return sum + trayCount;
+        }, 0);
+        if (unitsCount > 0) {
+          return unitsCount;
+        }
+      }
+
+      return 0;
+    }
+
+    function normalizeHealthPayload(payload) {
+      const raw = payload?.health
+        || payload?.driver_health
+        || payload?.status?.health
+        || payload?.driver?.health
+        || payload?.printer?.health
+        || payload;
+      const data = (raw && typeof raw === "object") ? raw : {};
+
+      const running = asBool(
+        data?.running
+        ?? data?.is_running
+        ?? data?.active
+        ?? data?.driver_running
+        ?? data?.status,
+      ) ?? false;
+
+      const connected = asBool(
+        data?.connected
+        ?? data?.is_connected
+        ?? data?.mqtt_connected
+        ?? data?.connected_raw
+        ?? data?.online
+        ?? data?.connection_status,
+      ) ?? false;
+
       return {
-        running: false,
-        connected: false,
-        slot_count: 0,
+        ...data,
+        running,
+        connected,
+        slot_count: deriveSlotCount(data),
       };
     }
 
