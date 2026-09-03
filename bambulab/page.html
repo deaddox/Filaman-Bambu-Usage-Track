@@ -217,6 +217,43 @@
       return Number.isFinite(parsed) ? parsed : null;
     }
 
+    function walkObjects(root, visit) {
+      const seen = new Set();
+      const stack = [root];
+      while (stack.length > 0) {
+        const node = stack.pop();
+        if (!node || typeof node !== "object") {
+          continue;
+        }
+        if (seen.has(node)) {
+          continue;
+        }
+        seen.add(node);
+        visit(node);
+        for (const value of Object.values(node)) {
+          if (value && typeof value === "object") {
+            stack.push(value);
+          }
+        }
+      }
+    }
+
+    function findFirstBoolByKeys(root, keys) {
+      let found = null;
+      walkObjects(root, (node) => {
+        if (found != null) return;
+        for (const key of keys) {
+          if (!(key in node)) continue;
+          const value = asBool(node[key]);
+          if (value != null) {
+            found = value;
+            return;
+          }
+        }
+      });
+      return found;
+    }
+
     function deriveSlotCount(data) {
       const direct = asNumber(
         data?.slot_count ?? data?.slots_count ?? data?.total_slots ?? data?.slotCount,
@@ -251,22 +288,39 @@
         || payload;
       const data = (raw && typeof raw === "object") ? raw : {};
 
-      const running = asBool(
+      const directRunning = asBool(
         data?.running
         ?? data?.is_running
         ?? data?.active
         ?? data?.driver_running
         ?? data?.status,
-      ) ?? false;
+      );
+      const nestedRunning = findFirstBoolByKeys(data, [
+        "running",
+        "is_running",
+        "driver_running",
+        "active",
+        "enabled",
+      ]);
 
-      const connected = asBool(
+      const directConnected = asBool(
         data?.connected
         ?? data?.is_connected
         ?? data?.mqtt_connected
         ?? data?.connected_raw
         ?? data?.online
         ?? data?.connection_status,
-      ) ?? false;
+      );
+      const nestedConnected = findFirstBoolByKeys(data, [
+        "connected",
+        "is_connected",
+        "mqtt_connected",
+        "connected_raw",
+        "online",
+      ]);
+
+      const running = directRunning ?? nestedRunning ?? false;
+      const connected = directConnected ?? nestedConnected ?? false;
 
       return {
         ...data,
