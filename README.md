@@ -139,9 +139,11 @@ Consumption tracking notes:
 - If 3MF cannot be downloaded or parsed into usable per-slot usage, the plugin records `0g` failure events for mapped spools (`source=bambulab_3mf_failed`).
 - Unknown or unmapped slot spools are skipped with warning logs.
 
-## Printer Parameters
+## Optional Filament and Spool Metadata Fields
 
-The plugin registers the following per-printer parameters for filaments and spools:
+Even in readonly-safe mode, the plugin can register optional metadata fields for
+filaments and spools in FilaMan. These are local catalog values used for UI and
+record keeping. They do not send write commands to the printer.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -156,7 +158,8 @@ The plugin registers the following per-printer parameters for filaments and spoo
 | Nozzle Temp Max | Number | Maximum nozzle temperature (°C) |
 | Max Volumetric Speed | Number | Maximum volumetric speed (mm³/s) |
 
-Parameters can be set at filament level (shared across spools) or overridden per individual spool.
+These values can be set at filament level (shared across spools) or overridden
+per individual spool.
 
 ## License
 
