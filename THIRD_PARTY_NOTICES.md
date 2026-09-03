@@ -37,6 +37,14 @@ sources, licenses, and attribution obligations so they can be preserved in every
 - Obligation: attribution is retained in the source code comments. The snippet is a
   small, isolated utility and does not extend copyleft to the rest of this project.
 
+## Bambuddy
+
+- Project: https://github.com/maziggy/bambuddy
+- Role: Reference for MQTT slot naming conventions and AMS display helpers.
+- License: Appears to be MIT or similar open-source license (not explicitly stated in repo).
+- Attribution: Slot naming and display logic reference the Bambuddy frontend helper conventions
+  (specifically `amsHelpers.ts`) for consistent UX with other Bambu Lab tools.
+
 ## bambu_filaments.json
 
 - Role: mapping of Bambu Lab material codes to display names.

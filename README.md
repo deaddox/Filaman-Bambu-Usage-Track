@@ -131,7 +131,7 @@ Create a new printer in the FilaMan admin panel and select **Bambu Lab** as driv
 > - Spool location assignment in FilaMan remains available and updates slot UI via short-lived virtual overlays.
 > - `spool_id` is included in slot payloads only when the plugin can prove slot ownership.
 
-See [docs/plugin-framework-maintainer.md](docs/plugin-framework-maintainer.md) for maintainer-level framework details and release checklist, and [docs/public-release-plan.md](docs/public-release-plan.md) for the AI-executable release plan. See [docs/database-storage.md](docs/database-storage.md) for exactly what data the plugin writes to the FilaMan database.
+See [docs/plugin-framework-maintainer.md](docs/plugin-framework-maintainer.md) for maintainer-level framework details and release checklist. See [docs/database-storage.md](docs/database-storage.md) for exactly what data the plugin writes to the FilaMan database.
 
 Consumption tracking notes:
 - When print state transitions out of `RUNNING`/`PAUSE`, the plugin finalizes a consumption snapshot.
