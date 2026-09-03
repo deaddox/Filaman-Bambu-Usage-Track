@@ -123,6 +123,8 @@ Create a new printer in the FilaMan admin panel and select **Bambu Lab** as driv
 | Enable Consumption Tracking | Records spool consumption events when a print finishes (default: enabled) |
 | Local 3MF Fetch Timeout | FTPS timeout for local 3MF metadata fetch (default: 8 seconds) |
 | Verify FTPS Certificate | Enables TLS certificate verification for local FTPS fetch (default: disabled) |
+| Catalog Images (Bambu Lab) | Enables catalog enrichment fields on slot payloads (default: disabled) |
+| Shop Image URL Template | Optional URL template for image resolution, supports placeholders `{code}` and `{name}` |
 
 > **Important:** The driver operates in **readonly-safe mode** for assignment actions.
 > - No printer-side write commands are sent for spool assignment.

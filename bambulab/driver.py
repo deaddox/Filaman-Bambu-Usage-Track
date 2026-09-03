@@ -134,6 +134,9 @@ class Driver(CatalogEnrichmentMixin, CatalogMixin, SlotSupportMixin, BaseDriver)
             config.get("resolve_shop_images", False),
             False,
         )
+        self._shop_image_url_template = str(
+            config.get("shop_image_url_template", "") or ""
+        ).strip()
         self._local_3mf_timeout_seconds = self._to_float(
             config.get("local_3mf_timeout_seconds", DEFAULT_LOCAL_3MF_TIMEOUT_SECONDS),
             DEFAULT_LOCAL_3MF_TIMEOUT_SECONDS,
@@ -554,36 +557,6 @@ class Driver(CatalogEnrichmentMixin, CatalogMixin, SlotSupportMixin, BaseDriver)
             unit_label = chr(65 + ams_id)  # 65 = 'A' in ASCII
             return f"{printer_name} - AMS {unit_label}{tray_id + 1}"
 
-    @staticmethod
-    def _is_external_slot_ams_id(ams_id: int) -> bool:
-        """Return True when an AMS id represents a true external tray slot."""
-        return ams_id >= 200
-
-    @staticmethod
-    def _is_ams_ht_slot_ams_id(ams_id: int) -> bool:
-        """Return True when an AMS id represents an AMS-HT unit channel."""
-        return 128 <= ams_id < 200
-
-    def _build_slot_location_identifier(self, ams_id: int, tray_id: int) -> str:
-        return f"bambulab_{self.printer_id}_{ams_id}_{tray_id}"
-
-    @staticmethod
-    def _parse_driver_slot_identifier(identifier: str | None) -> tuple[int, int, int] | None:
-        if not identifier or not identifier.startswith("bambulab_"):
-            return None
-
-        parts = identifier.split("_")
-        if len(parts) != 4:
-            return None
-
-        try:
-            printer_id = int(parts[1])
-            ams_id = int(parts[2])
-            tray_id = int(parts[3])
-        except (ValueError, TypeError):
-            return None
-
-        return printer_id, ams_id, tray_id
 
     async def _resolve_slot_location(
         self,
@@ -696,128 +669,6 @@ class Driver(CatalogEnrichmentMixin, CatalogMixin, SlotSupportMixin, BaseDriver)
                 exc,
             )
 
-    @staticmethod
-    def _select_external_tray_data(print_data: dict[str, Any]) -> dict[str, Any] | None:
-        """Return external tray data from push_status, preferring vt_tray then vir_slot.
-
-        Some firmware messages omit ``vt_tray`` and only provide ``vir_slot``
-        entries (typically id 254/255). In those cases we still need stable
-        external-slot tracking.
-
-        H2D: Falls back to ``device.ext_tool`` when ``vt_tray`` and ``vir_slot``
-        are absent and ``ext_tool.mount_3d == 1``.
-        """
-        vt_tray = print_data.get("vt_tray")
-        if isinstance(vt_tray, dict):
-            return vt_tray
-
-        vir_slots = print_data.get("vir_slot")
-        if isinstance(vir_slots, list):
-            candidates = [slot for slot in vir_slots if isinstance(slot, dict)]
-            if candidates:
-                # Prefer real external tray slot id=254 with material, then any tray
-                # that reports material, then id=254 as a stable fallback.
-                for slot in candidates:
-                    if str(slot.get("id", "")) == "254" and slot.get("tray_type"):
-                        return slot
-
-                for slot in candidates:
-                    if slot.get("tray_type"):
-                        return slot
-
-                for slot in candidates:
-                    if str(slot.get("id", "")) == "254":
-                        return slot
-
-                return candidates[0]
-
-        # H2D: use device.ext_tool as external spool proxy
-        device = print_data.get("device")
-        if isinstance(device, dict):
-            ext_tool = device.get("ext_tool")
-            if isinstance(ext_tool, dict) and ext_tool.get("mount_3d") == 1:
-                ext_type = ext_tool.get("type", "")
-                return {
-                    "id": "254",
-                    "tray_type": ext_type if ext_type and ext_type != "F000" else "",
-                    "tray_info_idx": "",
-                    "tray_color": "00000000",
-                    "nozzle_temp_min": "0",
-                    "nozzle_temp_max": "0",
-                    "remain": 0,
-                    "tag_uid": "0000000000000000",
-                }
-
-        return None
-
-    @staticmethod
-    def _parse_toolhead_slots(device_data: dict[str, Any]) -> list[dict[str, Any]]:
-        """Parse H2D toolhead slots from device.nozzle.info[] and
-        device.extruder.info[].
-
-        Creates synthetic slot dicts with ``slot_kind: "toolhead"`` for each
-        extruder/nozzle pair that has filament loaded (non-empty ``filam_bak``).
-
-        Only called for printers where ``_has_toolheads`` is True (H2D).
-        """
-        slots: list[dict[str, Any]] = []
-        nozzle_info = device_data.get("nozzle", {}).get("info", [])
-        extruder_info = device_data.get("extruder", {}).get("info", [])
-
-        if not isinstance(nozzle_info, list) or not isinstance(extruder_info, list):
-            return slots
-
-        nozzle_by_id: dict[int, dict[str, Any]] = {}
-        for n in nozzle_info:
-            if isinstance(n, dict) and "id" in n:
-                nozzle_by_id[int(n["id"])] = n
-
-        for extruder in extruder_info:
-            if not isinstance(extruder, dict):
-                continue
-            ext_id = int(extruder.get("id", -1))
-            filam_bak = extruder.get("filam_bak", [])
-            if not isinstance(filam_bak, list):
-                filam_bak = []
-            nozzle = nozzle_by_id.get(ext_id, {})
-            diameter = nozzle.get("diameter")
-            nozzle_type = nozzle.get("type", "")
-            has_filament = len(filam_bak) > 0
-
-            slot: dict[str, Any] = {
-                "slot_index": f"tool-{ext_id}",
-                "slot_name": f"Toolhead T{ext_id}",
-                "slot_kind": "toolhead",
-                "tray_info_idx": "",
-                "tray_type": "",
-                "tray_color": "",
-                "remain": None,
-                "nozzle_temp_min": None,
-                "nozzle_temp_max": None,
-                "setting_id": "",
-                "cali_idx": None,
-                "present": has_filament,
-            }
-
-            # Populate filament info from filam_bak if available
-            if has_filament and isinstance(filam_bak[0], dict):
-                fb = filam_bak[0]
-                slot["tray_type"] = fb.get("tray_type", "")
-                slot["tray_color"] = fb.get("tray_color", "")
-                slot["tray_info_idx"] = fb.get("tray_info_idx", "")
-                slot["nozzle_temp_min"] = fb.get("nozzle_temp_min")
-                slot["nozzle_temp_max"] = fb.get("nozzle_temp_max")
-                slot["remain"] = fb.get("remain")
-                slot["setting_id"] = fb.get("setting_id", "")
-                slot["cali_idx"] = fb.get("cali_idx")
-
-            # Attach nozzle metadata
-            slot["nozzle_diameter"] = diameter
-            slot["nozzle_type"] = nozzle_type
-
-            slots.append(slot)
-
-        return slots
 
     async def _update_spool_location(
         self, filaman_spool_id: int, ams_id: int, tray_id: int
@@ -910,70 +761,6 @@ class Driver(CatalogEnrichmentMixin, CatalogMixin, SlotSupportMixin, BaseDriver)
                 exc_info=True,
             )
 
-    @staticmethod
-    def _map_slot_index_to_3mf_id(ams_id: int, tray_id: int) -> int | None:
-        """Return the 1-based 3MF slot_id for a given (ams_id, tray_id) pair.
-
-        Bambu Studio numbers 3MF filament slots as ams_id*4 + tray_id + 1 for
-        normal AMS units.  External tray coordinates (ams_id >= 200) do not map
-        to this scheme; return None so the single-filament fallback can be used.
-
-        This mapping is a heuristic â€“ it matches Bambu Studio's current slicer
-        convention but may not cover all third-party slicer output.  Missing
-        slot_ids are handled by the single-filament fallback in the caller.
-        """
-        if (
-            Driver._is_external_slot_ams_id(ams_id)
-            or Driver._is_ams_ht_slot_ams_id(ams_id)
-        ):  # external/AMS-HT tray â€“ no predictable 3MF slot id
-            return None
-        return ams_id * 4 + tray_id + 1
-
-    @staticmethod
-    def _find_filament_id_from_mapping(
-        ams_id: int, tray_id: int, mapping_array: list[int]
-    ) -> int | None:
-        """Return the 1-based 3MF filament_id for a physical slot using the mapping array.
-        
-        The mapping array is the source of truth from print.mapping, where:
-        - mapping[i] encodes the physical slot (ams_id, tray_id) for filament_id=i+1
-        - mapping[i] // 256 = ams_id, mapping[i] % 256 = tray_id
-        
-        Args:
-            ams_id: Physical AMS unit id
-            tray_id: Physical tray id within the AMS
-            mapping_array: List of encoded physical slots from print.mapping
-            
-        Returns:
-            1-based filament_id that corresponds to this physical slot, or None if not found.
-        """
-        encoded_slot = ams_id * 256 + tray_id
-        
-        for filament_idx, encoded in enumerate(mapping_array):
-            try:
-                if int(encoded) == encoded_slot:
-                    return filament_idx + 1  # 1-based filament id
-            except (ValueError, TypeError):
-                continue
-        
-        return None
-
-    @staticmethod
-    def _slot_index_to_no(slot_index: str) -> int:
-        """Convert driver slot_index string (e.g. '0-1', '255-254') to integer slot_no.
-
-        Mirrors filaman-system plugin manager mapping for compatibility.
-        """
-        parts = slot_index.split("-", 1)
-        if len(parts) == 2:
-            try:
-                unit, tray = int(parts[0]), int(parts[1])
-                if unit >= 200:  # external tray
-                    return 1000 + tray
-                return unit * 4 + tray
-            except ValueError:
-                pass
-        return hash(slot_index) % 10000
 
     async def _clear_slot_assignment(self, slot_index: str) -> None:
         """Clear spool assignment when a slot becomes empty.
@@ -3662,22 +3449,24 @@ class Driver(CatalogEnrichmentMixin, CatalogMixin, SlotSupportMixin, BaseDriver)
                         slot_name = f"AMS {ams_id + 1} - Slot {tray_id + 1}"
 
                     present = bool(tray_type)
-                    ams_slots.append(
-                        {
-                            "slot_index": slot_index,
-                            "slot_name": slot_name,
-                            "slot_kind": "tray",
-                            "tray_info_idx": tray.get("tray_info_idx", ""),
-                            "tray_type": tray_type,
-                            "tray_color": tray.get("tray_color", ""),
-                            "remain": tray.get("remain"),
-                            "nozzle_temp_min": tray.get("nozzle_temp_min"),
-                            "nozzle_temp_max": tray.get("nozzle_temp_max"),
-                            "setting_id": tray.get("setting_id", ""),
-                            "cali_idx": tray.get("cali_idx"),
-                            "present": present,
-                        }
-                    )
+                    slot_payload = {
+                        "slot_index": slot_index,
+                        "slot_name": slot_name,
+                        "slot_kind": "tray",
+                        "tray_info_idx": tray.get("tray_info_idx", ""),
+                        "tray_type": tray_type,
+                        "tray_color": tray.get("tray_color", ""),
+                        "remain": tray.get("remain"),
+                        "nozzle_temp_min": tray.get("nozzle_temp_min"),
+                        "nozzle_temp_max": tray.get("nozzle_temp_max"),
+                        "setting_id": tray.get("setting_id", ""),
+                        "cali_idx": tray.get("cali_idx"),
+                        "present": present,
+                    }
+                    tray_image_url = self._pick_catalog_image_url(tray)
+                    if tray_image_url:
+                        slot_payload["catalog_image_url"] = tray_image_url
+                    ams_slots.append(slot_payload)
         else:
             ams_slots = prev_ams_slots
 
@@ -3690,22 +3479,24 @@ class Driver(CatalogEnrichmentMixin, CatalogMixin, SlotSupportMixin, BaseDriver)
         # Externe Spule: nur aktualisieren wenn externe Daten vorhanden, sonst vorherige beibehalten
         if external_tray is not None:
             ext_has_filament = bool(external_tray.get("tray_type"))
-            ext_slots = [
-                {
-                    "slot_index": "255-254",
-                    "slot_name": "External Tray",
-                    "slot_kind": "external",
-                    "tray_info_idx": external_tray.get("tray_info_idx", ""),
-                    "tray_type": external_tray.get("tray_type", ""),
-                    "tray_color": external_tray.get("tray_color", ""),
-                    "remain": external_tray.get("remain"),
-                    "nozzle_temp_min": external_tray.get("nozzle_temp_min"),
-                    "nozzle_temp_max": external_tray.get("nozzle_temp_max"),
-                    "setting_id": external_tray.get("setting_id", ""),
-                    "cali_idx": external_tray.get("cali_idx"),
-                    "present": ext_has_filament,
-                }
-            ]
+            ext_slot_payload = {
+                "slot_index": "255-254",
+                "slot_name": "External Tray",
+                "slot_kind": "external",
+                "tray_info_idx": external_tray.get("tray_info_idx", ""),
+                "tray_type": external_tray.get("tray_type", ""),
+                "tray_color": external_tray.get("tray_color", ""),
+                "remain": external_tray.get("remain"),
+                "nozzle_temp_min": external_tray.get("nozzle_temp_min"),
+                "nozzle_temp_max": external_tray.get("nozzle_temp_max"),
+                "setting_id": external_tray.get("setting_id", ""),
+                "cali_idx": external_tray.get("cali_idx"),
+                "present": ext_has_filament,
+            }
+            ext_image_url = self._pick_catalog_image_url(external_tray)
+            if ext_image_url:
+                ext_slot_payload["catalog_image_url"] = ext_image_url
+            ext_slots = [ext_slot_payload]
         else:
             ext_slots = prev_ext_slots
 
@@ -3713,6 +3504,7 @@ class Driver(CatalogEnrichmentMixin, CatalogMixin, SlotSupportMixin, BaseDriver)
         slots = toolhead_slots + ams_slots + ext_slots
         self._apply_virtual_slot_overrides(slots)
         self._inject_slot_spool_ids(slots)
+        self._enrich_slots_catalog_metadata(slots)
         has_external = len(ext_slots) > 0
 
         # -- Auto-assignment: Tray-Daten-Vergleich (wie C++ Implementierung) --
@@ -3943,6 +3735,9 @@ class Driver(CatalogEnrichmentMixin, CatalogMixin, SlotSupportMixin, BaseDriver)
             slot["tray_color"] = ov.get("tray_color", slot.get("tray_color", ""))
             slot["nozzle_temp_min"] = ov.get("nozzle_temp_min", slot.get("nozzle_temp_min"))
             slot["nozzle_temp_max"] = ov.get("nozzle_temp_max", slot.get("nozzle_temp_max"))
+            image_url = str(ov.get("catalog_image_url") or "").strip()
+            if image_url:
+                slot["catalog_image_url"] = image_url
             slot["present"] = True
 
     # -- Readonly assignment flow ---------------------------------------------
@@ -3998,6 +3793,9 @@ class Driver(CatalogEnrichmentMixin, CatalogMixin, SlotSupportMixin, BaseDriver)
                 overlay_data["nozzle_temp_min"] = filament_data.get("nozzle_temp_min")
             if "nozzle_temp_max" in filament_data:
                 overlay_data["nozzle_temp_max"] = filament_data.get("nozzle_temp_max")
+            image_url = self._pick_catalog_image_url(filament_data)
+            if image_url:
+                overlay_data["catalog_image_url"] = image_url
 
         self._set_slot_spool_id(slot_index, spool_id)
         self._apply_virtual_slot_assignment(
@@ -4201,6 +3999,7 @@ class Driver(CatalogEnrichmentMixin, CatalogMixin, SlotSupportMixin, BaseDriver)
             return
 
         self._inject_slot_spool_ids(self._current_slots)
+        self._enrich_slots_catalog_metadata(self._current_slots)
 
         ext_exists = any(s.get("slot_index") == "255-254" for s in self._current_slots)
         tool_exists = any(s.get("slot_kind") == "toolhead" for s in self._current_slots)
@@ -4275,6 +4074,7 @@ class Driver(CatalogEnrichmentMixin, CatalogMixin, SlotSupportMixin, BaseDriver)
             "tray_color": color,
             "nozzle_temp_min": filament_data.get("nozzle_temp_min", slot.get("nozzle_temp_min")),
             "nozzle_temp_max": filament_data.get("nozzle_temp_max", slot.get("nozzle_temp_max")),
+            "catalog_image_url": self._pick_catalog_image_url(filament_data),
             "expires_at": time.time() + VIRTUAL_ASSIGNMENT_TTL_SECONDS,
         }
 
@@ -4283,9 +4083,13 @@ class Driver(CatalogEnrichmentMixin, CatalogMixin, SlotSupportMixin, BaseDriver)
         slot["tray_color"] = self._virtual_slot_overrides[slot_index]["tray_color"]
         slot["nozzle_temp_min"] = self._virtual_slot_overrides[slot_index]["nozzle_temp_min"]
         slot["nozzle_temp_max"] = self._virtual_slot_overrides[slot_index]["nozzle_temp_max"]
+        overlay_image = self._virtual_slot_overrides[slot_index].get("catalog_image_url")
+        if overlay_image:
+            slot["catalog_image_url"] = overlay_image
         slot["present"] = True
         self._set_slot_spool_id(slot_index, spool_id)
         self._inject_slot_spool_ids(self._current_slots)
+        self._enrich_slots_catalog_metadata(self._current_slots)
 
         slot_changes = self._compute_slot_changes(old_slots, self._current_slots)
         self._emit_current_slots_update()
@@ -4388,9 +4192,14 @@ class Driver(CatalogEnrichmentMixin, CatalogMixin, SlotSupportMixin, BaseDriver)
             "write_mode_reason": write_mode_reason,
             "write_mode_checked_at": write_mode_checked_at,
             "resolve_shop_images": self._resolve_shop_images,
+            "shop_image_url_template": self._shop_image_url_template,
             "auto_unassign_on_remove": self._auto_unassign_on_remove,
             "consumption_tracking_enabled": self._consumption_tracking_enabled,
             "consumption_tracking_active": self._tracking_active,
+            "catalog": {
+                **self._catalog_feature_state(),
+                **self._catalog_health_payload(),
+            },
             "consumption_tracking_started_at": self._tracking_started_at.isoformat()
             if self._tracking_started_at
             else None,

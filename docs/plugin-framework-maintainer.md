@@ -13,15 +13,17 @@ This guide describes how this plugin integrates with the current `filaman-system
 
 Required for this driver plugin:
 
-- `plugin_key`: `bambulab`
+- `plugin_key`: `bambu_consu`
 - `plugin_type`: `driver`
-- `driver_key`: `bambulab`
-- `version`: semver (for example `2.5.1`)
+- `driver_key`: `bambu_consu`
+- `version`: semver (for example `3.0.0`)
 - `config_schema`: valid JSON schema for printer config
 
 Expected optional sections used by this plugin:
 
-- `capabilities`
+- `page_url` (plugin navigation route)
+- `show_in_nav` (toggle nav visibility)
+- `capabilities` (for example `slot_kinds`, `catalog_images`)
 - `printer_params`
 - `printer_params.migration.legacy_renames`
 
@@ -29,8 +31,8 @@ Expected optional sections used by this plugin:
 
 Required shape:
 
-- `class Driver(BaseDriver)`
-- class attribute `driver_key = "bambulab"`
+- `class Driver(..., BaseDriver)` (mixin composition is allowed)
+- class attribute `driver_key = "bambu_consu"`
 - `async start()`
 - `async stop()`
 
@@ -56,6 +58,7 @@ Primary emitted events:
 - Always includes `slots` and `ams_info`.
 - Slot metadata includes `slot_index`, `slot_name`, `present`, and tray fields.
 - `spool_id` is emitted per-slot only when spool identity is authoritative in the plugin.
+- Catalog enrichment metadata is optional per slot: `catalog_provider`, `catalog_material_code`, `catalog_material_name`, `catalog_image_url`.
 
 ## Readonly Assignment Model
 
@@ -95,7 +98,7 @@ Before releasing a plugin ZIP:
 
 3. Manifest consistency:
 - `plugin_type == "driver"`
-- `driver_key == plugin_key == "bambulab"`
+- `driver_key == plugin_key == "bambu_consu"`
 - version is valid semver
 
 4. No cache artifacts:

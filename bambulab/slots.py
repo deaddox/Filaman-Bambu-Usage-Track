@@ -7,6 +7,17 @@ class SlotSupportMixin:
     """Shared slot parsing and slot-id helper logic for the Bambu driver."""
 
     @staticmethod
+    def _pick_catalog_image_url(payload: dict[str, Any] | None) -> str | None:
+        if not isinstance(payload, dict):
+            return None
+
+        for key in ("catalog_image_url", "image_url", "img_url", "tray_img", "cover_url"):
+            value = str(payload.get(key) or "").strip()
+            if value:
+                return value
+        return None
+
+    @staticmethod
     def _is_external_slot_ams_id(ams_id: int) -> bool:
         """Return True when an AMS id represents a true external tray slot."""
         return ams_id >= 200
@@ -127,6 +138,9 @@ class SlotSupportMixin:
                 slot["remain"] = filament.get("remain")
                 slot["setting_id"] = filament.get("setting_id", "")
                 slot["cali_idx"] = filament.get("cali_idx")
+                image_url = SlotSupportMixin._pick_catalog_image_url(filament)
+                if image_url:
+                    slot["catalog_image_url"] = image_url
 
             slots.append(slot)
 

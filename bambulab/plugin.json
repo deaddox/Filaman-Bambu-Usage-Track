@@ -73,8 +73,14 @@
       "resolve_shop_images": {
         "type": "boolean",
         "title": "Catalog Images (Bambu Lab)",
-        "description": "Resolve Bambu catalog image metadata and store image URLs on matching filaments. No image binaries are stored.",
+        "description": "Enable catalog metadata enrichment for slot payloads. Image URLs are only set when present in printer payloads or resolvable via template.",
         "default": false
+      },
+      "shop_image_url_template": {
+        "type": "string",
+        "title": "Shop Image URL Template",
+        "description": "Optional URL template used when resolve_shop_images is enabled. Use {code} for material code and {name} for material name.",
+        "default": ""
       }
     },
     "required": ["printer_model", "host", "serial", "access_code"]
